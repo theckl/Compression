@@ -1,0 +1,10 @@
+name = "compression"
+version = "0.1.0"
+defaultTargets = ["compression"]
+
+[[lean_lib]]
+name = "Compression"
+
+[[lean_exe]]
+name = "compression"
+root = "Main"
