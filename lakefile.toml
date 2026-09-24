@@ -8,3 +8,7 @@ name = "Compression"
 [[lean_exe]]
 name = "compression"
 root = "Main"
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
