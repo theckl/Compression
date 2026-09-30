@@ -141,16 +141,49 @@ def initNewNode (v : Nat) : M Unit := do
           stack := v :: s.stack
           onStack := s.onStack.set! v true }
 
+/-- Pop vertices until root is reached, producing one SCC. -/
+partial def popComponent (root : Nat) : M (List Nat) := do
+  let s ← get
+  match s.stack with
+  | [] =>
+      StateT.pure []
+  | x :: xs =>
+      set { s with
+              stack := xs
+              onStack := s.onStack.set! x false }
+      if x = root then
+        StateT.pure [x]
+      else
+        let rest ← popComponent root   --unsafe recursion -> partial def
+        StateT.pure (x :: rest)
+
 /-- Main recursive Depth-First Search. -/
-def strongConnect (g : Array (Array Nat)) (v : Nat) :
+partial def strongConnect (g : Array (Array Nat)) (v : Nat) :
     M Unit := do
   initNewNode v
   for w in g[v]! do
     let s ← get
     match s.indices[w]! with
-    | none      => sorry
-    | some idxW => sorry
-  sorry
+    | none      =>
+       strongConnect g w        --unsafe recursion -> partial def
+       let s <- get
+       let lowV := s.lowlink[v]!
+       let lowW := s.lowlink[w]!
+       modify fun st =>
+         { st with
+             lowlink := st.lowlink.set! v (min lowV lowW) }
+    | some idxW =>
+        if s.onStack[w]! then
+          let lv := s.lowlink[v]!
+          let newLow :=min lv idxW
+          set { s with lowlink := s.lowlink.set! v newLow }
+  let s ← get
+  let lowV := s.lowlink[v]!
+  let idxV := (s.indices[v]!).get!
+  if lowV = idxV then
+    let comp ← popComponent v
+    modify fun st =>
+      { st with sccs := comp :: st.sccs }
 
 /-- Run Tarjan's algorithm on a graph whose nodes are names. -/
 def sccs (g : Array (Array Nat)) : List (List Nat) :=
@@ -173,5 +206,21 @@ def sccs (g : Array (Array Nat)) : List (List Nat) :=
   let final := (visitAll 0).run init
   final.snd.sccs.reverse
 
-
 end Tarjan
+
+/-- To apply Tarjan's algorithm on the weighted dependency map, we
+    convert it to an adjacency list with enumerated nodes, forgetting the
+    weights for the moment. -/
+def enumNodes (weightedDepMap : Std.HashMap Name (Array (Name × Nat))) :
+    Std.HashMap Name Nat :=
+  let keys := weightedDepMap.toList.map Prod.fst
+  let (_, result) := keys.foldl
+                       (fun (idx, acc) key =>
+                          (idx + 1, acc.insert key idx))
+                       (0, {})
+  result
+
+def idxNodes (weightedDepMap : Std.HashMap Name (Array (Name × Nat))) :
+    Array Name :=
+  let keys := weightedDepMap.toList.map Prod.fst
+  keys.toArray
